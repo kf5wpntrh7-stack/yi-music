@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#09090d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="yi Music">
+    <meta name="description" content="yi 的手機 YouTube 歌單播放器，可整理 MB3 歌單並加入歌曲。">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <title>yi Music</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">yi</span><span>Music</span></div>
+        <div class="top-actions">
+          <button id="settingsButton" class="icon-button" type="button" aria-label="設定">⋯</button>
+          <button id="addSongButton" class="add-button" type="button"><span>＋</span> 加入歌曲</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <section class="player-card" aria-label="播放器">
+          <div class="video-frame">
+            <div id="youtubePlayer"></div>
+            <div id="playerPlaceholder" class="player-placeholder"><span class="music-glyph">♪</span><p>選一首歌開始播放</p></div>
+          </div>
+          <div class="now-playing">
+            <p class="eyebrow">正在播放</p>
+            <h1 id="nowTitle">尚未選擇歌曲</h1>
+            <p id="nowPlaylist" class="now-playlist">537</p>
+          </div>
+          <div class="progress-wrap">
+            <input id="progressBar" type="range" min="0" max="1000" value="0" aria-label="播放進度">
+            <div class="time-row"><span id="currentTime">0:00</span><span id="durationTime">0:00</span></div>
+          </div>
+          <div class="transport">
+            <button id="shuffleButton" class="control-button" type="button" aria-label="隨機播放" title="隨機播放">⇄</button>
+            <button id="previousButton" class="control-button" type="button" aria-label="上一首">◀</button>
+            <button id="playButton" class="play-button" type="button" aria-label="播放或暫停">▶</button>
+            <button id="nextButton" class="control-button" type="button" aria-label="下一首">▶</button>
+            <button id="repeatButton" class="control-button" type="button" aria-label="循環播放" title="循環播放">↻</button>
+          </div>
+          <div class="volume-control">
+            <button id="muteButton" type="button" aria-label="靜音" title="靜音"><span id="volumeIcon" aria-hidden="true">🔊</span></button>
+            <input id="volumeSlider" type="range" min="0" max="100" step="1" value="80" aria-label="播放音量">
+            <output id="volumeValue" for="volumeSlider">80%</output>
+          </div>
+          <button id="blackScreenButton" class="black-screen-trigger" type="button"><span class="black-dot"></span>黑屏播放<small>畫面全黑並嘗試保持喚醒</small></button>
+        </section>
+
+        <section class="library-card" aria-label="歌單">
+          <div class="library-header">
+            <div><p class="eyebrow">我的歌單</p><select id="playlistSelect" aria-label="選擇歌單"></select></div>
+            <div class="library-actions">
+              <button id="newPlaylistButton" class="secondary-button" type="button">新增歌單</button>
+              <button id="organizeButton" class="secondary-button" type="button">整理</button>
+            </div>
+          </div>
+          <div class="search-row">
+            <label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="搜尋這個歌單" autocomplete="off"></label>
+            <span id="songCount" class="song-count">0 首</span>
+          </div>
+          <div id="organizeBar" class="organize-bar" hidden>
+            <span>點箭頭調整順序，或移到其他歌單</span>
+            <button id="renamePlaylistButton" type="button">重新命名</button>
+            <button id="deletePlaylistButton" class="danger-text" type="button">刪除歌單</button>
+          </div>
+          <div id="songList" class="song-list" aria-live="polite"></div>
+        </section>
+      </div>
+    </main>
+
+    <div id="miniPlayer" class="mini-player" hidden>
+      <img id="miniThumb" alt="" width="48" height="48">
+      <button id="miniInfo" class="mini-info" type="button" aria-label="回到播放器"><span id="miniTitle">尚未播放</span><small id="miniPlaylist">MB3・537</small></button>
+      <button id="miniPlayButton" class="mini-control" type="button" aria-label="播放或暫停">▶</button>
+      <button id="miniNextButton" class="mini-control" type="button" aria-label="下一首">▶</button>
+    </div>
+
+    <div id="blackScreen" class="black-screen" hidden>
+      <button id="exitBlackScreen" class="black-exit" type="button">退出黑屏</button>
+      <div class="black-now"><span class="black-eq"><i></i><i></i><i></i></span><p id="blackTitle">正在播放</p><small>螢幕仍保持開啟・亮度可調到最低</small></div>
+    </div>
+
+    <dialog id="addSongDialog" class="app-dialog">
+      <form id="addSongForm" method="dialog">
+        <div class="dialog-heading"><div><p class="eyebrow">新增音樂</p><h2>加入 YouTube 歌曲</h2></div><button class="close-button" type="button" data-close="addSongDialog" aria-label="關閉">×</button></div>
+        <label>歌曲網址或影片 ID<input id="songUrlInput" name="url" required placeholder="貼上 YouTube 網址"></label>
+        <label>歌曲名稱 <small>可留空自動取得</small><input id="songTitleInput" name="title" placeholder="例如：歌手－歌名"></label>
+        <label>加入歌單<select id="addToPlaylistSelect" name="playlist"></select></label>
+        <p id="addSongError" class="form-error" aria-live="polite"></p>
+        <button class="primary-button" type="submit">加入歌單</button>
+      </form>
+    </dialog>
+
+    <dialog id="playlistDialog" class="app-dialog">
+      <form id="playlistForm" method="dialog">
+        <div class="dialog-heading"><div><p class="eyebrow">歌單</p><h2 id="playlistDialogTitle">新增歌單</h2></div><button class="close-button" type="button" data-close="playlistDialog" aria-label="關閉">×</button></div>
+        <label>歌單名稱<input id="playlistNameInput" name="name" required maxlength="40" placeholder="例如：上班聽"></label>
+        <button id="playlistSubmitButton" class="primary-button" type="submit">建立歌單</button>
+      </form>
+    </dialog>
+
+    <dialog id="moveSongDialog" class="app-dialog">
+      <form id="moveSongForm" method="dialog">
+        <div class="dialog-heading"><div><p class="eyebrow">整理歌曲</p><h2>移到其他歌單</h2></div><button class="close-button" type="button" data-close="moveSongDialog" aria-label="關閉">×</button></div>
+        <p id="moveSongTitle" class="dialog-song-title"></p>
+        <label>目的歌單<select id="moveToPlaylistSelect" name="playlist"></select></label>
+        <button class="primary-button" type="submit">移動歌曲</button>
+      </form>
+    </dialog>
+
+    <dialog id="replaceSongDialog" class="app-dialog">
+      <form id="replaceSongForm" method="dialog">
+        <div class="dialog-heading"><div><p class="eyebrow">影片無法播放</p><h2>尋找替代版本</h2></div><button class="close-button" type="button" data-close="replaceSongDialog" aria-label="關閉">×</button></div>
+        <p id="replaceOriginalTitle" class="dialog-song-title"></p>
+        <p class="replacement-note">先到 YouTube 搜尋同一首歌，選好能播放的版本後，再把網址貼回來。</p>
+        <a id="searchYoutubeLink" class="search-youtube-button" href="https://www.youtube.com" target="_blank" rel="noopener">到 YouTube 搜尋同名歌曲</a>
+        <label>新的 YouTube 網址<input id="replacementUrlInput" name="url" required placeholder="貼上新的 YouTube 網址"></label>
+        <label>歌曲名稱 <small>預設保留原名稱</small><input id="replacementTitleInput" name="title"></label>
+        <p id="replaceSongError" class="form-error" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button id="skipUnavailableButton" class="secondary-button" type="button">先跳到下一首</button>
+          <button class="primary-button" type="submit">置換這首歌</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="settingsDialog" class="app-dialog settings-dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">yi Music</p><h2>設定與備份</h2></div><button class="close-button" type="button" data-close="settingsDialog" aria-label="關閉">×</button></div>
+      <div class="settings-list">
+        <button id="exportButton" type="button"><span><b>備份全部歌單</b><small>下載成 JSON 檔</small></span><i>›</i></button>
+        <button id="importButton" type="button"><span><b>匯入歌單備份</b><small>還原先前下載的檔案</small></span><i>›</i></button>
+        <button id="restoreMb3Button" type="button"><span><b>重新加入 5 個原始 MB3 歌單</b><small>不會刪除其他歌單</small></span><i>›</i></button>
+      </div>
+      <p class="storage-note">歌單只會保存在目前裝置與瀏覽器，不會自動同步到其他手機或電腦。換裝置或清除網站資料前，請先下載備份，再到另一台裝置匯入。</p>
+      <input id="importFileInput" type="file" accept="application/json,.json" hidden>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="playlist.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
