@@ -11,6 +11,7 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="apple-touch-icon" href="favicon.svg">
     <title>yi Music</title>
   </head>
   <body>
@@ -58,6 +59,7 @@
             <div><p class="eyebrow">我的歌單</p><select id="playlistSelect" aria-label="選擇歌單"></select></div>
             <div class="library-actions">
               <button id="newPlaylistButton" class="secondary-button" type="button">新增歌單</button>
+              <button id="renamePlaylistButton" class="secondary-button" type="button">修改名稱</button>
               <button id="organizeButton" class="secondary-button" type="button">整理</button>
             </div>
           </div>
@@ -67,7 +69,6 @@
           </div>
           <div id="organizeBar" class="organize-bar" hidden>
             <span>點箭頭調整順序，或移到其他歌單</span>
-            <button id="renamePlaylistButton" type="button">重新命名</button>
             <button id="deletePlaylistButton" class="danger-text" type="button">刪除歌單</button>
           </div>
           <div id="songList" class="song-list" aria-live="polite"></div>
@@ -136,7 +137,7 @@
       <div class="settings-list">
         <button id="exportButton" type="button"><span><b>備份全部歌單</b><small>下載成 JSON 檔</small></span><i>›</i></button>
         <button id="importButton" type="button"><span><b>匯入歌單備份</b><small>還原先前下載的檔案</small></span><i>›</i></button>
-        <button id="restoreMb3Button" type="button"><span><b>重新加入 5 個原始 MB3 歌單</b><small>不會刪除其他歌單</small></span><i>›</i></button>
+        <button id="restoreMb3Button" type="button"><span><b>修復原始 MB3 歌單</b><small>只補回缺少的原始歌單與歌曲</small></span><i>›</i></button>
       </div>
       <p class="storage-note">歌單只會保存在目前裝置與瀏覽器，不會自動同步到其他手機或電腦。換裝置或清除網站資料前，請先下載備份，再到另一台裝置匯入。</p>
       <input id="importFileInput" type="file" accept="application/json,.json" hidden>
