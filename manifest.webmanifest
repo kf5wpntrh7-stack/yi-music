@@ -4,6 +4,9 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
   "background_color": "#08080b",
   "theme_color": "#08080b",
   "description": "yi 的手機 YouTube 歌單播放器"
