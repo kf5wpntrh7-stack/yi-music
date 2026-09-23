@@ -4,11 +4,12 @@
   const STORAGE_KEY = 'yi-music-library-v1';
   const VOLUME_KEY = 'yi-music-volume-v1';
   const PLAYBACK_KEY = 'yi-music-playback-v1';
+  const COMPACT_KEY = 'yi-music-compact-v1';
   const PRIMARY_PLAYLIST_ID = 'mb3-537';
   const PAGE_SIZE = 80;
   const $ = (id) => document.getElementById(id);
   const els = {
-    playerPlaceholder: $('playerPlaceholder'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
+    playerCard: $('playerCard'), playerPlaceholder: $('playerPlaceholder'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
     progressBar: $('progressBar'), currentTime: $('currentTime'), durationTime: $('durationTime'),
     playButton: $('playButton'), previousButton: $('previousButton'), nextButton: $('nextButton'),
     shuffleButton: $('shuffleButton'), repeatButton: $('repeatButton'), blackScreenButton: $('blackScreenButton'),
@@ -29,6 +30,7 @@
     importFileInput: $('importFileInput'), miniPlayer: $('miniPlayer'), miniThumb: $('miniThumb'),
     miniInfo: $('miniInfo'), miniTitle: $('miniTitle'), miniPlaylist: $('miniPlaylist'), miniPlayButton: $('miniPlayButton'),
     miniNextButton: $('miniNextButton'), blackScreen: $('blackScreen'), exitBlackScreen: $('exitBlackScreen'),
+    compactPlayerButton: $('compactPlayerButton'), compactRestoreButton: $('compactRestoreButton'),
     blackTitle: $('blackTitle'), toast: $('toast')
   };
 
@@ -47,6 +49,8 @@
   let repeatMode = ['off', 'all', 'one'].includes(playbackPrefs.repeatMode) ? playbackPrefs.repeatMode : 'off';
   let visibleSongLimit = PAGE_SIZE;
   let lastPositionSave = 0;
+  let compactMode = localStorage.getItem(COMPACT_KEY) === '1';
+  let wasPlayingBeforeHidden = false;
   const storedVolume = localStorage.getItem(VOLUME_KEY);
   let volume = storedVolume === null ? 80 : Math.min(100, Math.max(0, Number(storedVolume) || 0));
   let previousVolume = volume || 80;
@@ -241,13 +245,21 @@
     els.playButton.textContent = isPlaying ? '❚❚' : '▶';
     els.miniPlayButton.textContent = isPlaying ? '❚❚' : '▶';
     els.playerPlaceholder.hidden = Boolean(currentSong);
-    els.miniPlayer.hidden = !currentSong;
+    els.miniPlayer.hidden = !currentSong || compactMode;
     if (currentSong) {
       els.miniThumb.src = thumbnail(currentSong.videoId);
       els.miniTitle.textContent = currentSong.title;
       els.miniPlaylist.textContent = playlist?.name || '';
       updateMediaSession();
     }
+  }
+
+  function applyCompactMode(enabled, { scroll = true } = {}) {
+    compactMode = Boolean(enabled);
+    els.playerCard.classList.toggle('is-compact', compactMode);
+    try { localStorage.setItem(COMPACT_KEY, compactMode ? '1' : '0'); } catch (_) {}
+    updateNowPlaying();
+    if (!compactMode && scroll) els.playerCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function setCurrentSong(song, playlistId, autoplay = true) {
@@ -326,6 +338,7 @@
 
   function onPlayerStateChange(event) {
     isPlaying = event.data === 1;
+    try { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'; } catch (_) {}
     updateNowPlaying();
     if (event.data === 0) {
       if (repeatMode === 'one') player.playVideo();
@@ -348,6 +361,7 @@
         onReady: () => {
           playerReady = true;
           applyVolume(volume);
+          player.getIframe?.()?.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
           if (currentSong) {
             player.cueVideoById(currentSong.videoId);
             const savedPosition = Number(playbackPrefs.position) || 0;
@@ -375,6 +389,9 @@
       if (document.activeElement !== els.progressBar) els.progressBar.value = duration ? Math.round(current / duration * 1000) : 0;
       els.currentTime.textContent = formatTime(current);
       els.durationTime.textContent = formatTime(duration);
+      if ('mediaSession' in navigator && duration > 0 && current >= 0 && current <= duration) {
+        try { navigator.mediaSession.setPositionState({ duration, playbackRate: player.getPlaybackRate?.() || 1, position: current }); } catch (_) {}
+      }
       if (Date.now() - lastPositionSave > 5000) { lastPositionSave = Date.now(); savePlaybackPrefs(current); }
     } catch (_) {}
   }
@@ -396,7 +413,14 @@
 
   function setMediaHandlers() {
     if (!('mediaSession' in navigator)) return;
-    const handlers = { play: () => playerReady && player.playVideo(), pause: () => playerReady && player.pauseVideo(), nexttrack: () => nextSong(), previoustrack: previousSong };
+    const handlers = {
+      play: () => playerReady && player.playVideo(), pause: () => playerReady && player.pauseVideo(),
+      nexttrack: () => nextSong(), previoustrack: previousSong,
+      seekbackward: (details) => playerReady && player.seekTo(Math.max(0, (player.getCurrentTime?.() || 0) - (details.seekOffset || 10)), true),
+      seekforward: (details) => playerReady && player.seekTo(Math.min(player.getDuration?.() || Infinity, (player.getCurrentTime?.() || 0) + (details.seekOffset || 10)), true),
+      seekto: (details) => playerReady && player.seekTo(details.seekTime || 0, true),
+      stop: () => { if (playerReady) player.stopVideo(); isPlaying = false; updateNowPlaying(); }
+    };
     Object.entries(handlers).forEach(([name, handler]) => { try { navigator.mediaSession.setActionHandler(name, handler); } catch (_) {} });
   }
 
@@ -670,6 +694,8 @@
   els.blackScreenButton.addEventListener('click', enterBlackScreen);
   els.exitBlackScreen.addEventListener('click', exitBlackScreen);
   els.blackScreen.addEventListener('dblclick', exitBlackScreen);
+  els.compactPlayerButton.addEventListener('click', () => applyCompactMode(true));
+  els.compactRestoreButton.addEventListener('click', () => applyCompactMode(false));
 
   els.addSongButton.addEventListener('click', () => { renderPlaylistSelectors(); els.addSongError.textContent = ''; els.addSongForm.reset(); els.addToPlaylistSelect.value = state.activePlaylistId; els.addSongDialog.showModal(); setTimeout(() => els.songUrlInput.focus(), 30); });
   els.addSongForm.addEventListener('submit', async (event) => {
@@ -764,10 +790,18 @@
   document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => $(button.dataset.close).close()));
   document.querySelectorAll('dialog').forEach((dialog) => dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); }));
   document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'hidden') {
+      wasPlayingBeforeHidden = Boolean(playerReady && player.getPlayerState?.() === 1);
+      if (playerReady) savePlaybackPrefs(player.getCurrentTime?.() || 0);
+    }
+    if (document.visibilityState === 'visible' && wasPlayingBeforeHidden && playerReady && player.getPlayerState?.() !== 1) {
+      try { player.playVideo(); } catch (_) {}
+    }
     if (document.visibilityState === 'visible' && !els.blackScreen.hidden && 'wakeLock' in navigator && !wakeLock) {
       try { wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
     }
   });
+  window.addEventListener('pagehide', () => { if (playerReady) savePlaybackPrefs(player.getCurrentTime?.() || 0); });
 
   applyVolume(volume);
   const savedPlaybackPlaylist = state.playlists.find((p) => p.id === playbackPlaylistId);
@@ -775,6 +809,7 @@
   els.shuffleButton.classList.toggle('active', shuffle);
   els.repeatButton.classList.toggle('active', repeatMode !== 'off');
   els.repeatButton.textContent = repeatMode === 'one' ? '↻¹' : '↻';
+  applyCompactMode(compactMode, { scroll: false });
   renderAll();
   loadYouTubeApi();
   setMediaHandlers();
