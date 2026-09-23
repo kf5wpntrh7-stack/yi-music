@@ -51,6 +51,7 @@
   let lastPositionSave = 0;
   let compactMode = localStorage.getItem(COMPACT_KEY) === '1';
   let wasPlayingBeforeHidden = false;
+  let pendingAutoplay = false;
   const storedVolume = localStorage.getItem(VOLUME_KEY);
   let volume = storedVolume === null ? 80 : Math.min(100, Math.max(0, Number(storedVolume) || 0));
   let previousVolume = volume || 80;
@@ -262,18 +263,37 @@
     if (!compactMode && scroll) els.playerCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  function playerVideoId() {
+    if (!playerReady) return '';
+    try { return player.getVideoData?.().video_id || ''; } catch (_) { return ''; }
+  }
+
+  function loadCurrentSong({ autoplay = true, position = 0 } = {}) {
+    if (!playerReady || !currentSong) return;
+    const sameVideo = playerVideoId() === currentSong.videoId;
+    try {
+      if (sameVideo) {
+        if (position > 0 && Math.abs((player.getCurrentTime?.() || 0) - position) > 3) player.seekTo(position, true);
+        if (autoplay && player.getPlayerState?.() !== 1) player.playVideo();
+        return;
+      }
+      const request = { videoId: currentSong.videoId, startSeconds: Math.max(0, Number(position) || 0) };
+      if (autoplay) player.loadVideoById(request);
+      else player.cueVideoById(request);
+    } catch (_) {}
+  }
+
   function setCurrentSong(song, playlistId, autoplay = true) {
     if (!song) return;
+    const isSameSong = currentSong?.id === song.id && playbackPlaylistId === playlistId && (!playerReady || !playerVideoId() || playerVideoId() === song.videoId);
     currentSong = song;
     playbackPlaylistId = playlistId;
-    playbackPrefs.position = 0;
-    savePlaybackPrefs(0);
+    pendingAutoplay = Boolean(autoplay);
+    if (!isSameSong) playbackPrefs.position = 0;
+    savePlaybackPrefs(isSameSong ? playbackPrefs.position : 0);
     updateNowPlaying();
     renderSongList();
-    if (playerReady) {
-      if (autoplay) player.loadVideoById(song.videoId);
-      else player.cueVideoById(song.videoId);
-    }
+    if (playerReady) loadCurrentSong({ autoplay, position: isSameSong ? (player.getCurrentTime?.() || playbackPrefs.position || 0) : 0 });
   }
 
   function playSongById(songId) {
@@ -355,7 +375,7 @@
 
   window.onYouTubeIframeAPIReady = () => {
     player = new YT.Player('youtubePlayer', {
-      width: '100%', height: '100%', videoId: currentSong?.videoId || '',
+      width: '100%', height: '100%',
       playerVars: { playsinline: 1, rel: 0, modestbranding: 1, enablejsapi: 1, origin: location.origin },
       events: {
         onReady: () => {
@@ -363,9 +383,8 @@
           applyVolume(volume);
           player.getIframe?.()?.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
           if (currentSong) {
-            player.cueVideoById(currentSong.videoId);
             const savedPosition = Number(playbackPrefs.position) || 0;
-            if (savedPosition > 0) setTimeout(() => { try { player.seekTo(savedPosition, true); } catch (_) {} }, 500);
+            loadCurrentSong({ autoplay: pendingAutoplay, position: savedPosition });
           }
         },
         onStateChange: onPlayerStateChange,
