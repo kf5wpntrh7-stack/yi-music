@@ -25,7 +25,8 @@
       </header>
 
       <div class="workspace">
-        <section class="player-card" aria-label="播放器">
+        <section id="playerCard" class="player-card" aria-label="播放器">
+          <div class="compact-header"><span>yi Music 小視窗</span><button id="compactRestoreButton" type="button">放大</button></div>
           <div class="video-frame">
             <div id="youtubePlayer"></div>
             <div id="playerPlaceholder" class="player-placeholder"><span class="music-glyph">♪</span><p>選一首歌開始播放</p></div>
@@ -34,6 +35,7 @@
             <p class="eyebrow">正在播放</p>
             <h1 id="nowTitle">尚未選擇歌曲</h1>
             <p id="nowPlaylist" class="now-playlist">537</p>
+            <button id="compactPlayerButton" class="compact-trigger" type="button">縮小成浮動播放器</button>
           </div>
           <div class="progress-wrap">
             <input id="progressBar" type="range" min="0" max="1000" value="0" aria-label="播放進度">
@@ -140,6 +142,7 @@
         <button id="restoreMb3Button" type="button"><span><b>修復原始 MB3 歌單</b><small>只補回缺少的原始歌單與歌曲</small></span><i>›</i></button>
       </div>
       <p class="storage-note">歌單只會保存在目前裝置與瀏覽器，不會自動同步到其他手機或電腦。換裝置或清除網站資料前，請先下載備份，再到另一台裝置匯入。</p>
+      <p class="background-note"><b>手機背景播放加強</b><br>請先播放歌曲，再把網站加入手機主畫面使用。鎖定畫面後若暫停，可從鎖定畫面的播放控制按一次播放。YouTube 與 iPhone 仍可能限制關螢幕播放，網頁無法完全強制。</p>
       <input id="importFileInput" type="file" accept="application/json,.json" hidden>
     </dialog>
 
