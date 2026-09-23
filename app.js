@@ -3,7 +3,9 @@
 
   const STORAGE_KEY = 'yi-music-library-v1';
   const VOLUME_KEY = 'yi-music-volume-v1';
+  const PLAYBACK_KEY = 'yi-music-playback-v1';
   const PRIMARY_PLAYLIST_ID = 'mb3-537';
+  const PAGE_SIZE = 80;
   const $ = (id) => document.getElementById(id);
   const els = {
     playerPlaceholder: $('playerPlaceholder'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
@@ -31,17 +33,20 @@
   };
 
   let state = loadState();
+  let playbackPrefs = loadPlaybackPrefs();
   let player = null;
   let playerReady = false;
   let isPlaying = false;
   let currentSong = null;
-  let playbackPlaylistId = state.activePlaylistId;
+  let playbackPlaylistId = playbackPrefs.playlistId || state.activePlaylistId;
   let organizeMode = false;
   let playlistDialogMode = 'create';
   let movingSongId = null;
   let replaceTarget = null;
-  let shuffle = false;
-  let repeatMode = 'off';
+  let shuffle = Boolean(playbackPrefs.shuffle);
+  let repeatMode = ['off', 'all', 'one'].includes(playbackPrefs.repeatMode) ? playbackPrefs.repeatMode : 'off';
+  let visibleSongLimit = PAGE_SIZE;
+  let lastPositionSave = 0;
   const storedVolume = localStorage.getItem(VOLUME_KEY);
   let volume = storedVolume === null ? 80 : Math.min(100, Math.max(0, Number(storedVolume) || 0));
   let previousVolume = volume || 80;
@@ -53,10 +58,25 @@
     return imported.map((playlist, index) => ({
       id: playlist.id,
       sourceId: playlist.sourceId,
-      name: playlist.name,
+      name: playlist.name === 'cnady crush bgm' ? 'Candy Crush BGM' : playlist.name,
       createdAt: Date.now() + index,
       songs: Array.isArray(playlist.songs) ? playlist.songs.map((song) => ({ ...song })) : []
     }));
+  }
+
+  function loadPlaybackPrefs() {
+    try { return JSON.parse(localStorage.getItem(PLAYBACK_KEY)) || {}; } catch (_) { return {}; }
+  }
+
+  function savePlaybackPrefs(position) {
+    playbackPrefs = {
+      playlistId: playbackPlaylistId,
+      songId: currentSong?.id || null,
+      position: Number.isFinite(position) ? Math.max(0, position) : (playbackPrefs.position || 0),
+      shuffle,
+      repeatMode
+    };
+    try { localStorage.setItem(PLAYBACK_KEY, JSON.stringify(playbackPrefs)); } catch (_) {}
   }
 
   function loadState() {
@@ -64,26 +84,35 @@
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (saved && Array.isArray(saved.playlists) && saved.playlists.length) {
+        const deletedOriginalSongIds = new Set(Array.isArray(saved.deletedOriginalSongIds) ? saved.deletedOriginalSongIds : []);
         const savedById = new Map(saved.playlists.map((playlist) => [playlist.id, playlist]));
         const originalIds = new Set(originals.map((playlist) => playlist.id));
         const mergedOriginals = originals.map((original) => {
           const existing = savedById.get(original.id);
           if (!existing) return original;
           if (original.id === PRIMARY_PLAYLIST_ID && existing.name === 'MB3・537') existing.name = '537';
+          if (existing.name === 'cnady crush bgm') existing.name = 'Candy Crush BGM';
           const knownIds = new Set(existing.songs.map((song) => song.id));
           const knownVideos = new Set(existing.songs.map((song) => song.videoId));
-          const missingSongs = original.songs.filter((song) => !knownIds.has(song.id) && !knownVideos.has(song.videoId));
+          const missingSongs = original.songs.filter((song) => !deletedOriginalSongIds.has(song.id) && !knownIds.has(song.id) && !knownVideos.has(song.videoId));
           return { ...existing, sourceId: original.sourceId, songs: [...existing.songs, ...missingSongs] };
         });
         const customPlaylists = saved.playlists.filter((playlist) => !originalIds.has(playlist.id));
         const playlists = [...mergedOriginals, ...customPlaylists];
         const activeExists = playlists.some((playlist) => playlist.id === saved.activePlaylistId);
-        const migrated = { version: 2, playlists, activePlaylistId: activeExists ? saved.activePlaylistId : PRIMARY_PLAYLIST_ID };
+        const migrated = { version: 3, playlists, activePlaylistId: activeExists ? saved.activePlaylistId : PRIMARY_PLAYLIST_ID, deletedOriginalSongIds: [...deletedOriginalSongIds] };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
         return migrated;
       }
     } catch (_) {}
-    return { version: 2, playlists: originals, activePlaylistId: PRIMARY_PLAYLIST_ID };
+    return { version: 3, playlists: originals, activePlaylistId: PRIMARY_PLAYLIST_ID, deletedOriginalSongIds: [] };
+  }
+
+  function markOriginalSongRemoved(song) {
+    if (!song?.id || !makeDefaultPlaylists().some((p) => p.songs.some((item) => item.id === song.id))) return;
+    const removed = new Set(state.deletedOriginalSongIds || []);
+    removed.add(song.id);
+    state.deletedOriginalSongIds = [...removed];
   }
 
   function saveState() {
@@ -168,8 +197,9 @@
   function renderSongList() {
     const playlist = activePlaylist();
     const query = els.searchInput.value.trim().toLocaleLowerCase();
-    const songs = playlist.songs.filter((song) => !query || song.title.toLocaleLowerCase().includes(query));
-    els.songCount.textContent = query ? `${songs.length}／${playlist.songs.length} 首` : `${playlist.songs.length} 首`;
+    const matchingSongs = playlist.songs.filter((song) => !query || song.title.toLocaleLowerCase().includes(query));
+    const songs = matchingSongs.slice(0, visibleSongLimit);
+    els.songCount.textContent = query ? `${matchingSongs.length}／${playlist.songs.length} 首` : `${playlist.songs.length} 首`;
     els.deletePlaylistButton.hidden = state.playlists.length <= 1;
 
     if (!songs.length) {
@@ -184,6 +214,7 @@
         <button type="button" data-action="up" data-id="${escapeHtml(song.id)}" aria-label="向上移">↑</button>
         <button type="button" data-action="down" data-id="${escapeHtml(song.id)}" aria-label="向下移">↓</button>
         <button type="button" data-action="replace" data-id="${escapeHtml(song.id)}" aria-label="替換來源">換</button>
+        <button type="button" data-action="position" data-id="${escapeHtml(song.id)}" aria-label="移到指定位置">序</button>
         <button class="move-song" type="button" data-action="move" data-id="${escapeHtml(song.id)}">移動</button>
         <button class="delete-song" type="button" data-action="delete" data-id="${escapeHtml(song.id)}" aria-label="刪除">刪</button>
       </div>` : `<button class="row-play" type="button" data-action="play" data-id="${escapeHtml(song.id)}" aria-label="播放">▶</button>`;
@@ -192,7 +223,7 @@
           <img src="${thumbnail(song.videoId)}" alt="" loading="lazy">
           <span class="song-copy"><span class="song-title">${escapeHtml(song.title)}</span><span class="song-meta"><span class="song-index">${index + 1}</span>・${formatTime(song.duration)}</span></span>
         </button>${tools}</article>`;
-    }).join('');
+    }).join('') + (matchingSongs.length > songs.length ? `<button class="load-more" type="button" data-load-more>再顯示 ${Math.min(PAGE_SIZE, matchingSongs.length - songs.length)} 首</button>` : '');
   }
 
   function renderAll() {
@@ -223,6 +254,8 @@
     if (!song) return;
     currentSong = song;
     playbackPlaylistId = playlistId;
+    playbackPrefs.position = 0;
+    savePlaybackPrefs(0);
     updateNowPlaying();
     renderSongList();
     if (playerReady) {
@@ -312,7 +345,15 @@
       width: '100%', height: '100%', videoId: currentSong?.videoId || '',
       playerVars: { playsinline: 1, rel: 0, modestbranding: 1, enablejsapi: 1, origin: location.origin },
       events: {
-        onReady: () => { playerReady = true; applyVolume(volume); if (currentSong) player.cueVideoById(currentSong.videoId); },
+        onReady: () => {
+          playerReady = true;
+          applyVolume(volume);
+          if (currentSong) {
+            player.cueVideoById(currentSong.videoId);
+            const savedPosition = Number(playbackPrefs.position) || 0;
+            if (savedPosition > 0) setTimeout(() => { try { player.seekTo(savedPosition, true); } catch (_) {} }, 500);
+          }
+        },
         onStateChange: onPlayerStateChange,
         onError: onPlayerError
       }
@@ -334,6 +375,7 @@
       if (document.activeElement !== els.progressBar) els.progressBar.value = duration ? Math.round(current / duration * 1000) : 0;
       els.currentTime.textContent = formatTime(current);
       els.durationTime.textContent = formatTime(duration);
+      if (Date.now() - lastPositionSave > 5000) { lastPositionSave = Date.now(); savePlaybackPrefs(current); }
     } catch (_) {}
   }
 
@@ -404,10 +446,33 @@
     const playlist = activePlaylist();
     const song = playlist.songs.find((item) => item.id === songId);
     if (!song || !confirm(`要從「${playlist.name}」刪除「${song.title}」嗎？`)) return;
+    markOriginalSongRemoved(song);
     playlist.songs = playlist.songs.filter((item) => item.id !== songId);
+    if (currentSong?.id === songId && playbackPlaylistId === playlist.id) {
+      currentSong = null;
+      isPlaying = false;
+      try { player?.stopVideo(); } catch (_) {}
+      savePlaybackPrefs(0);
+      updateNowPlaying();
+    }
     saveState();
     renderSongList();
     showToast('已從歌單刪除');
+  }
+
+  function moveSongToPosition(songId) {
+    const playlist = activePlaylist();
+    const index = playlist.songs.findIndex((song) => song.id === songId);
+    if (index < 0) return;
+    const input = prompt(`要把這首歌移到第幾首？\n請輸入 1～${playlist.songs.length}`, String(index + 1));
+    if (input === null) return;
+    const target = Math.min(playlist.songs.length, Math.max(1, Number.parseInt(input, 10) || 0)) - 1;
+    if (target < 0 || target === index) return;
+    const [song] = playlist.songs.splice(index, 1);
+    playlist.songs.splice(target, 0, song);
+    saveState();
+    renderSongList();
+    document.querySelector(`[data-song-id="${CSS.escape(songId)}"]`)?.scrollIntoView({ block: 'center' });
   }
 
   function openMoveDialog(songId) {
@@ -503,17 +568,28 @@
   }
 
   function restoreMb3Playlists() {
-    const freshPlaylists = makeDefaultPlaylists().map((playlist) => {
-      if (!state.playlists.some((saved) => saved.id === playlist.id)) return playlist;
-      return { ...playlist, id: uid('mb3'), name: `${playlist.name}（原始）` };
-    });
-    state.playlists.push(...freshPlaylists);
-    state.activePlaylistId = freshPlaylists[0]?.id || state.activePlaylistId;
+    const originals = makeDefaultPlaylists();
+    let addedPlaylists = 0;
+    let addedSongs = 0;
+    for (const original of originals) {
+      let saved = state.playlists.find((p) => p.id === original.id);
+      if (!saved) {
+        state.playlists.push(original);
+        addedPlaylists += 1;
+        addedSongs += original.songs.length;
+        continue;
+      }
+      const ids = new Set(saved.songs.map((song) => song.id));
+      const videos = new Set(saved.songs.map((song) => song.videoId));
+      const missing = original.songs.filter((song) => !ids.has(song.id) && !videos.has(song.videoId));
+      saved.songs.push(...missing);
+      addedSongs += missing.length;
+    }
+    state.deletedOriginalSongIds = [];
     saveState();
     renderAll();
     els.settingsDialog.close();
-    const songCount = freshPlaylists.reduce((total, playlist) => total + playlist.songs.length, 0);
-    showToast(`已加入 5 個 MB3 歌單，共 ${songCount} 首`);
+    showToast(addedPlaylists || addedSongs ? `已補回 ${addedPlaylists} 個歌單、${addedSongs} 首歌曲` : '原始 MB3 歌單已經完整');
   }
 
   function registerWebMcpTools() {
@@ -544,9 +620,10 @@
     state.activePlaylistId = els.playlistSelect.value;
     saveState();
     els.searchInput.value = '';
+    visibleSongLimit = PAGE_SIZE;
     renderAll();
   });
-  els.searchInput.addEventListener('input', renderSongList);
+  els.searchInput.addEventListener('input', () => { visibleSongLimit = PAGE_SIZE; renderSongList(); });
   els.organizeButton.addEventListener('click', () => {
     organizeMode = !organizeMode;
     els.organizeButton.textContent = organizeMode ? '完成' : '整理';
@@ -555,6 +632,7 @@
     renderSongList();
   });
   els.songList.addEventListener('click', (event) => {
+    if (event.target.closest('[data-load-more]')) { visibleSongLimit += PAGE_SIZE; renderSongList(); return; }
     const emptyAdd = event.target.closest('[data-empty-add]');
     if (emptyAdd) return els.addSongButton.click();
     const button = event.target.closest('[data-action]');
@@ -565,6 +643,7 @@
     if (action === 'down') moveSongOrder(id, 1);
     if (action === 'move') openMoveDialog(id);
     if (action === 'replace') openReplaceDialog(id);
+    if (action === 'position') moveSongToPosition(id);
     if (action === 'delete') deleteSong(id);
   });
   els.playButton.addEventListener('click', togglePlayback);
@@ -572,11 +651,12 @@
   els.nextButton.addEventListener('click', () => nextSong());
   els.miniNextButton.addEventListener('click', () => nextSong());
   els.previousButton.addEventListener('click', previousSong);
-  els.shuffleButton.addEventListener('click', () => { shuffle = !shuffle; els.shuffleButton.classList.toggle('active', shuffle); showToast(shuffle ? '已開啟隨機播放' : '已關閉隨機播放'); });
+  els.shuffleButton.addEventListener('click', () => { shuffle = !shuffle; savePlaybackPrefs(); els.shuffleButton.classList.toggle('active', shuffle); showToast(shuffle ? '已開啟隨機播放' : '已關閉隨機播放'); });
   els.repeatButton.addEventListener('click', () => {
     repeatMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
     els.repeatButton.classList.toggle('active', repeatMode !== 'off');
     els.repeatButton.textContent = repeatMode === 'one' ? '↻¹' : '↻';
+    savePlaybackPrefs();
     showToast(repeatMode === 'one' ? '單曲循環' : repeatMode === 'all' ? '歌單循環' : '循環已關閉');
   });
   els.volumeSlider.addEventListener('input', () => applyVolume(els.volumeSlider.value));
@@ -622,6 +702,13 @@
     if (!confirm(`刪除「${playlist.name}」及其中 ${playlist.songs.length} 首歌曲嗎？`)) return;
     state.playlists = state.playlists.filter((p) => p.id !== playlist.id);
     state.activePlaylistId = state.playlists[0].id;
+    if (playbackPlaylistId === playlist.id) {
+      playbackPlaylistId = state.activePlaylistId;
+      currentSong = null;
+      isPlaying = false;
+      try { player?.stopVideo(); } catch (_) {}
+      savePlaybackPrefs(0);
+    }
     saveState(); renderAll(); showToast('歌單已刪除');
   });
   els.moveSongForm.addEventListener('submit', (event) => {
@@ -631,6 +718,7 @@
     const destination = state.playlists.find((p) => p.id === els.moveToPlaylistSelect.value);
     if (!song || !destination) return;
     if (destination.songs.some((item) => item.videoId === song.videoId)) { showToast('目的歌單已經有這首歌'); return; }
+    markOriginalSongRemoved(song);
     source.songs = source.songs.filter((item) => item.id !== song.id);
     destination.songs.push(song);
     saveState(); renderSongList(); els.moveSongDialog.close(); showToast(`已移到「${destination.name}」`);
@@ -682,6 +770,11 @@
   });
 
   applyVolume(volume);
+  const savedPlaybackPlaylist = state.playlists.find((p) => p.id === playbackPlaylistId);
+  currentSong = savedPlaybackPlaylist?.songs.find((song) => song.id === playbackPrefs.songId) || null;
+  els.shuffleButton.classList.toggle('active', shuffle);
+  els.repeatButton.classList.toggle('active', repeatMode !== 'off');
+  els.repeatButton.textContent = repeatMode === 'one' ? '↻¹' : '↻';
   renderAll();
   loadYouTubeApi();
   setMediaHandlers();
