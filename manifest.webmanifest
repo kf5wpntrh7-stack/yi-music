@@ -1,0 +1,10 @@
+{
+  "name": "yi Music",
+  "short_name": "yi Music",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#08080b",
+  "theme_color": "#08080b",
+  "description": "yi 的手機 YouTube 歌單播放器"
+}
