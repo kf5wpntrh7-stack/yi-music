@@ -30,7 +30,7 @@
     importFileInput: $('importFileInput'), miniPlayer: $('miniPlayer'), miniThumb: $('miniThumb'),
     miniInfo: $('miniInfo'), miniTitle: $('miniTitle'), miniPlaylist: $('miniPlaylist'), miniPlayButton: $('miniPlayButton'),
     miniNextButton: $('miniNextButton'), blackScreen: $('blackScreen'), exitBlackScreen: $('exitBlackScreen'),
-    compactPlayerButton: $('compactPlayerButton'), compactRestoreButton: $('compactRestoreButton'),
+    compactPlayerButton: $('compactPlayerButton'), compactRestoreButton: $('compactRestoreButton'), compactBlackScreenButton: $('compactBlackScreenButton'),
     blackTitle: $('blackTitle'), toast: $('toast')
   };
 
@@ -711,6 +711,7 @@
   });
   els.miniInfo.addEventListener('click', () => document.querySelector('.player-card').scrollIntoView({ behavior: 'smooth', block: 'start' }));
   els.blackScreenButton.addEventListener('click', enterBlackScreen);
+  els.compactBlackScreenButton.addEventListener('click', enterBlackScreen);
   els.exitBlackScreen.addEventListener('click', exitBlackScreen);
   els.blackScreen.addEventListener('dblclick', exitBlackScreen);
   els.compactPlayerButton.addEventListener('click', () => applyCompactMode(true));
