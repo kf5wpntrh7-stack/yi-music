@@ -589,10 +589,19 @@
     showToast('歌單備份已下載');
   }
 
+  function readBackupFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('read'));
+      reader.readAsText(file, 'UTF-8');
+    });
+  }
+
   async function importLibrary(file) {
     try {
-      const data = JSON.parse(await file.text());
-      if (!Array.isArray(data.playlists) || !data.playlists.length) throw new Error();
+      const data = JSON.parse((await readBackupFile(file)).replace(/^\uFEFF/, ''));
+      if (!Array.isArray(data.playlists) || !data.playlists.length) throw new Error('format');
       const ids = new Set();
       const valid = data.playlists.every((p) => {
         if (!p || typeof p.id !== 'string' || typeof p.name !== 'string' || !p.name.trim() || !Array.isArray(p.songs) || ids.has(p.id)) return false;
@@ -605,7 +614,7 @@
           return true;
         });
       });
-      if (!valid) throw new Error();
+      if (!valid) throw new Error('format');
       if (!confirm('匯入備份會取代目前所有歌單，確定繼續嗎？')) return;
       const deleted = new Set(Array.isArray(data.deletedOriginalSongIds) ? data.deletedOriginalSongIds.filter(id => typeof id === 'string') : []);
       for (const original of makeDefaultPlaylists()) {
@@ -614,18 +623,26 @@
         const importedIds = new Set(imported.songs.map(song => song.id));
         for (const song of original.songs) if (!importedIds.has(song.id)) deleted.add(song.id);
       }
+      const nextState = { version: 3, playlists: data.playlists, activePlaylistId: ids.has(data.activePlaylistId) ? data.activePlaylistId : data.playlists[0].id, deletedOriginalSongIds: [...deleted] };
+      const saved = JSON.stringify(nextState);
+      try {
+        localStorage.setItem(STORAGE_KEY, saved);
+        if (localStorage.getItem(STORAGE_KEY) !== saved) throw new Error('storage');
+      } catch (_) {
+        showToast('手機儲存空間不足或瀏覽器禁止儲存，請先釋出空間再匯入');
+        return;
+      }
       if (playerReady) { try { player.stopVideo(); } catch (_) {} }
       isPlaying = false;
-      state = { version: 3, playlists: data.playlists, activePlaylistId: ids.has(data.activePlaylistId) ? data.activePlaylistId : data.playlists[0].id, deletedOriginalSongIds: [...deleted] };
+      state = nextState;
       playbackPlaylistId = state.activePlaylistId;
       currentSong = null;
       savePlaybackPrefs(0);
-      saveState();
       renderAll();
       els.settingsDialog.close();
-      showToast('歌單備份已匯入');
-    } catch (_) {
-      showToast('這不是有效的 yi Music 備份檔');
+      showToast('已匯入 ' + state.playlists.length + ' 個歌單');
+    } catch (error) {
+      showToast(error.message === 'read' ? '無法讀取檔案，請從手機「檔案」App 選擇 JSON 備份' : '這不是有效的 yi Music 備份檔');
     } finally {
       els.importFileInput.value = '';
     }
