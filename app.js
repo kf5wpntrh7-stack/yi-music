@@ -227,7 +227,7 @@
       return `<article class="song-row${currentClass}" data-song-id="${escapeHtml(song.id)}">
         <button class="song-main" type="button" data-action="play" data-id="${escapeHtml(song.id)}">
           <img src="${thumbnail(song.videoId)}" alt="" loading="lazy">
-          <span class="song-copy"><span class="song-title">${escapeHtml(song.title)}</span><span class="song-meta"><span class="song-index">${index + 1}</span>・${formatTime(song.duration)}</span></span>
+          <span class="song-copy"><span class="song-title">${escapeHtml(song.title)}</span><span class="song-meta"><span class="song-index">${playlist.songs.length - index}</span>・${formatTime(song.duration)}</span></span>
         </button>${tools}</article>`;
     }).join('') + (matchingSongs.length > songs.length ? `<button class="load-more" type="button" data-load-more>再顯示 ${Math.min(PAGE_SIZE, matchingSongs.length - songs.length)} 首</button>` : '');
   }
