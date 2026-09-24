@@ -105,12 +105,13 @@
         const customPlaylists = saved.playlists.filter((playlist) => !originalIds.has(playlist.id));
         const playlists = [...mergedOriginals, ...customPlaylists];
         const activeExists = playlists.some((playlist) => playlist.id === saved.activePlaylistId);
-        const migrated = { version: 3, playlists, activePlaylistId: activeExists ? saved.activePlaylistId : PRIMARY_PLAYLIST_ID, deletedOriginalSongIds: [...deletedOriginalSongIds] };
+        const migrated = { version: 3, playlists, activePlaylistId: activeExists ? saved.activePlaylistId : PRIMARY_PLAYLIST_ID, deletedOriginalSongIds: [...deletedOriginalSongIds], newestFirst: true };
+        if (saved.newestFirst !== true) migrated.playlists.forEach((playlist) => playlist.songs.reverse());
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
         return migrated;
       }
     } catch (_) {}
-    return { version: 3, playlists: originals, activePlaylistId: PRIMARY_PLAYLIST_ID, deletedOriginalSongIds: [] };
+    return { version: 3, playlists: originals.map((playlist) => ({ ...playlist, songs: playlist.songs.reverse() })), activePlaylistId: PRIMARY_PLAYLIST_ID, deletedOriginalSongIds: [], newestFirst: true };
   }
 
   function markOriginalSongRemoved(song) {
@@ -623,7 +624,7 @@
         const importedIds = new Set(imported.songs.map(song => song.id));
         for (const song of original.songs) if (!importedIds.has(song.id)) deleted.add(song.id);
       }
-      const nextState = { version: 3, playlists: data.playlists, activePlaylistId: ids.has(data.activePlaylistId) ? data.activePlaylistId : data.playlists[0].id, deletedOriginalSongIds: [...deleted] };
+      const nextState = { version: 3, playlists: data.playlists.map((playlist) => ({ ...playlist, songs: data.newestFirst === true ? playlist.songs : [...playlist.songs].reverse() })), activePlaylistId: ids.has(data.activePlaylistId) ? data.activePlaylistId : data.playlists[0].id, deletedOriginalSongIds: [...deleted], newestFirst: true };
       const saved = JSON.stringify(nextState);
       try {
         localStorage.setItem(STORAGE_KEY, saved);
