@@ -111,3 +111,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 @media(min-width:860px){.app-shell{padding:28px 22px 120px}.workspace{grid-template-columns:minmax(330px,430px) minmax(0,1fr);align-items:start;gap:20px}.player-card{position:sticky;top:22px;padding:15px 15px 20px}.library-card{padding:22px;max-height:calc(100dvh - 98px);overflow:auto}.mini-player{display:none!important}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
 @media(max-width:620px){.player-card.is-compact{width:min(230px,calc(100vw - 24px));left:auto}}
+
+.settings-list>.import-file-label{display:block;padding:14px;border:1px solid var(--line);border-radius:14px;background:#101016;text-align:left;cursor:pointer}
+.import-file-label input{display:block;width:100%;margin-top:12px;color:var(--text);font-size:.9rem}
+.import-file-label input::file-selector-button{padding:9px 12px;margin-right:12px;border:0;border-radius:8px;background:var(--accent);color:white;cursor:pointer}
