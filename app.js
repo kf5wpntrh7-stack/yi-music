@@ -16,7 +16,7 @@
     muteButton: $('muteButton'), volumeIcon: $('volumeIcon'), volumeSlider: $('volumeSlider'), volumeValue: $('volumeValue'),
     playlistSelect: $('playlistSelect'), addToPlaylistSelect: $('addToPlaylistSelect'), songCount: $('songCount'),
     searchInput: $('searchInput'), songList: $('songList'), organizeButton: $('organizeButton'),
-    organizeBar: $('organizeBar'), reversePlaylistButton: $('reversePlaylistButton'), renamePlaylistButton: $('renamePlaylistButton'), deletePlaylistButton: $('deletePlaylistButton'),
+    organizeBar: $('organizeBar'), renamePlaylistButton: $('renamePlaylistButton'), deletePlaylistButton: $('deletePlaylistButton'),
     addSongButton: $('addSongButton'), newPlaylistButton: $('newPlaylistButton'), settingsButton: $('settingsButton'),
     addSongDialog: $('addSongDialog'), addSongForm: $('addSongForm'), songUrlInput: $('songUrlInput'),
     songTitleInput: $('songTitleInput'), addSongError: $('addSongError'), playlistDialog: $('playlistDialog'),
@@ -843,15 +843,6 @@
   els.settingsButton.addEventListener('click', () => els.settingsDialog.showModal());
   els.exportButton.addEventListener('click', exportLibrary);
   els.importFileInput.addEventListener('change', () => { const file = els.importFileInput.files?.[0]; if (file) importLibrary(file); });
-  els.reversePlaylistButton.addEventListener('click', () => {
-    const playlist = activePlaylist();
-    if (!playlist.songs.length || !confirm('要倒轉「' + playlist.name + '」全部 ' + playlist.songs.length + ' 首歌的順序嗎？')) return;
-    playlist.songs.reverse();
-    saveState();
-    visibleSongLimit = PAGE_SIZE;
-    renderSongList();
-    showToast('順序已倒轉，新加入的歌曲會排在最前面');
-  });
   els.restoreMb3Button.addEventListener('click', restoreMb3Playlists);
   document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => $(button.dataset.close).close()));
   document.querySelectorAll('dialog').forEach((dialog) => dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); }));
