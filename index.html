@@ -71,6 +71,7 @@
           </div>
           <div id="organizeBar" class="organize-bar" hidden>
             <span>點箭頭調整順序，或移到其他歌單</span>
+            <button id="reversePlaylistButton" class="secondary-button" type="button">倒轉歌曲順序</button>
             <button id="deletePlaylistButton" class="danger-text" type="button">刪除歌單</button>
           </div>
           <div id="songList" class="song-list" aria-live="polite"></div>
@@ -138,12 +139,11 @@
       <div class="dialog-heading"><div><p class="eyebrow">yi Music</p><h2>設定與備份</h2></div><button class="close-button" type="button" data-close="settingsDialog" aria-label="關閉">×</button></div>
       <div class="settings-list">
         <button id="exportButton" type="button"><span><b>備份全部歌單</b><small>下載成 JSON 檔</small></span><i>›</i></button>
-        <button id="importButton" type="button"><span><b>匯入歌單備份</b><small>還原先前下載的檔案</small></span><i>›</i></button>
+        <label class="import-file-label" for="importFileInput"><b>匯入歌單備份</b><small>點選「選擇檔案」，選擇 JSON 備份</small><input id="importFileInput" type="file" accept=".json,application/json,text/plain" aria-label="選擇歌單備份檔"></label>
         <button id="restoreMb3Button" type="button"><span><b>修復原始 MB3 歌單</b><small>只補回缺少的原始歌單與歌曲</small></span><i>›</i></button>
       </div>
       <p class="storage-note">歌單只會保存在目前裝置與瀏覽器，不會自動同步到其他手機或電腦。換裝置或清除網站資料前，請先下載備份，再到另一台裝置匯入。</p>
       <p class="background-note"><b>手機背景播放加強</b><br>請先播放歌曲，再把網站加入手機主畫面使用。鎖定畫面後若暫停，可從鎖定畫面的播放控制按一次播放。YouTube 與 iPhone 仍可能限制關螢幕播放，網頁無法完全強制。</p>
-      <input id="importFileInput" type="file" accept="application/json,.json" hidden>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
