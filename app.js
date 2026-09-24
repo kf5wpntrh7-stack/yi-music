@@ -593,12 +593,33 @@
     try {
       const data = JSON.parse(await file.text());
       if (!Array.isArray(data.playlists) || !data.playlists.length) throw new Error();
-      const valid = data.playlists.every((p) => p.id && p.name && Array.isArray(p.songs) && p.songs.every((s) => s.id && s.videoId && s.title));
+      const ids = new Set();
+      const valid = data.playlists.every((p) => {
+        if (!p || typeof p.id !== 'string' || typeof p.name !== 'string' || !p.name.trim() || !Array.isArray(p.songs) || ids.has(p.id)) return false;
+        ids.add(p.id);
+        const songIds = new Set();
+        return p.songs.every((s) => {
+          if (!s || typeof s.id !== 'string' || songIds.has(s.id) || typeof s.videoId !== 'string' ||
+              !/^[\\w-]{11}$/.test(s.videoId) || typeof s.title !== 'string' || !s.title.trim()) return false;
+          songIds.add(s.id);
+          return true;
+        });
+      });
       if (!valid) throw new Error();
       if (!confirm('匯入備份會取代目前所有歌單，確定繼續嗎？')) return;
-      state = { version: 1, playlists: data.playlists, activePlaylistId: data.playlists.some((p) => p.id === data.activePlaylistId) ? data.activePlaylistId : data.playlists[0].id };
+      const deleted = new Set(Array.isArray(data.deletedOriginalSongIds) ? data.deletedOriginalSongIds.filter(id => typeof id === 'string') : []);
+      for (const original of makeDefaultPlaylists()) {
+        const imported = data.playlists.find(p => p.id === original.id);
+        if (!imported) continue;
+        const importedIds = new Set(imported.songs.map(song => song.id));
+        for (const song of original.songs) if (!importedIds.has(song.id)) deleted.add(song.id);
+      }
+      if (playerReady) { try { player.stopVideo(); } catch (_) {} }
+      isPlaying = false;
+      state = { version: 3, playlists: data.playlists, activePlaylistId: ids.has(data.activePlaylistId) ? data.activePlaylistId : data.playlists[0].id, deletedOriginalSongIds: [...deleted] };
       playbackPlaylistId = state.activePlaylistId;
       currentSong = null;
+      savePlaybackPrefs(0);
       saveState();
       renderAll();
       els.settingsDialog.close();
