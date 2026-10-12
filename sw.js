@@ -1,4 +1,4 @@
-const CACHE = 'yi-music-shell-v12';
+const CACHE = 'yi-music-shell-v13';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './playlist.js', './manifest.webmanifest', './favicon.svg'];
 
 self.addEventListener('install', (event) => {
