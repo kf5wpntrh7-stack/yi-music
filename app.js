@@ -94,19 +94,22 @@
         const originalIds = new Set(originals.map((playlist) => playlist.id));
         const mergedOriginals = originals.map((original) => {
           const existing = savedById.get(original.id);
-          if (!existing) return original;
+          if (!existing) return { ...original, songs: [...original.songs].reverse() };
           if (original.id === PRIMARY_PLAYLIST_ID && existing.name === 'MB3・537') existing.name = '537';
           if (existing.name === 'cnady crush bgm') existing.name = 'Candy Crush BGM';
-          const knownIds = new Set(existing.songs.map((song) => song.id));
-          const knownVideos = new Set(existing.songs.map((song) => song.videoId));
+          const originalVideos = new Set(original.songs.map((song) => song.videoId));
+          const retainedSongs = existing.songs.filter((song) => original.id !== PRIMARY_PLAYLIST_ID || song.source !== 'MB3' || originalVideos.has(song.videoId));
+          const existingSongs = saved.newestFirst === true ? retainedSongs : [...retainedSongs].reverse();
+          const knownIds = new Set(existingSongs.map((song) => song.id));
+          const knownVideos = new Set(existingSongs.map((song) => song.videoId));
           const missingSongs = original.songs.filter((song) => !deletedOriginalSongIds.has(song.id) && !knownIds.has(song.id) && !knownVideos.has(song.videoId));
-          return { ...existing, sourceId: original.sourceId, songs: [...existing.songs, ...missingSongs] };
+          return { ...existing, sourceId: original.sourceId, songs: [...missingSongs.reverse(), ...existingSongs] };
         });
         const customPlaylists = saved.playlists.filter((playlist) => !originalIds.has(playlist.id));
         const playlists = [...mergedOriginals, ...customPlaylists];
         const activeExists = playlists.some((playlist) => playlist.id === saved.activePlaylistId);
         const migrated = { version: 3, playlists, activePlaylistId: activeExists ? saved.activePlaylistId : PRIMARY_PLAYLIST_ID, deletedOriginalSongIds: [...deletedOriginalSongIds], newestFirst: true };
-        if (saved.newestFirst !== true) migrated.playlists.forEach((playlist) => playlist.songs.reverse());
+        if (saved.newestFirst !== true) customPlaylists.forEach((playlist) => playlist.songs.reverse());
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
         return migrated;
       }
