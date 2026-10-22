@@ -26,8 +26,6 @@
 
       <div class="workspace">
         <section id="playerCard" class="player-card" aria-label="播放器">
-          <div class="compact-header"><span>yi Music 小視窗</span><div class="compact-actions"><button id="compactBlackScreenButton" type="button">黑屏</button><button id="compactRestoreButton" type="button">放大</button></div></div>
-
           <div class="now-playing-hero">
             <div class="album-art" aria-label="歌曲封面">
               <img id="currentArtwork" alt="" loading="eager" hidden>
@@ -59,12 +57,7 @@
           </div>
           <button id="blackScreenButton" class="black-screen-trigger" type="button"><span class="black-dot"></span>黑屏播放<small>畫面全黑並嘗試保持喚醒</small></button>
 
-          <div class="video-section">
-            <div class="video-heading"><strong>影片畫面</strong><span>YouTube 播放器</span></div>
-            <div class="video-frame" aria-label="YouTube 影片播放區">
-              <div id="youtubePlayer"></div>
-            </div>
-          </div>
+
         </section>
 
         <section class="library-card" aria-label="歌單">
@@ -85,6 +78,16 @@
             <button id="deletePlaylistButton" class="danger-text" type="button">刪除歌單</button>
           </div>
           <div id="songList" class="song-list" aria-live="polite"></div>
+        </section>
+
+        <section id="videoCard" class="video-card" aria-label="YouTube 影片">
+          <div class="compact-header"><span>yi Music 小視窗</span><div class="compact-actions"><button id="compactBlackScreenButton" type="button">黑屏</button><button id="compactRestoreButton" type="button">放大</button></div></div>
+          <div class="video-section">
+            <div class="video-heading"><strong>影片畫面</strong><span>YouTube 播放器</span></div>
+            <div class="video-frame" aria-label="YouTube 影片播放區">
+              <div id="youtubePlayer"></div>
+            </div>
+          </div>
         </section>
       </div>
     </main>
