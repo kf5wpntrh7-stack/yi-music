@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-    <meta name="theme-color" content="#09090d">
+    <meta name="theme-color" content="#e4e6e9">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="yi Music">
@@ -27,16 +27,20 @@
       <div class="workspace">
         <section id="playerCard" class="player-card" aria-label="播放器">
           <div class="compact-header"><span>yi Music 小視窗</span><div class="compact-actions"><button id="compactBlackScreenButton" type="button">黑屏</button><button id="compactRestoreButton" type="button">放大</button></div></div>
-          <div class="video-frame">
-            <div id="youtubePlayer"></div>
-            <div id="playerPlaceholder" class="player-placeholder"><span class="music-glyph">♪</span><p>選一首歌開始播放</p></div>
+
+          <div class="now-playing-hero">
+            <div class="album-art" aria-label="歌曲封面">
+              <img id="currentArtwork" alt="" loading="eager" hidden>
+              <div id="artworkPlaceholder" class="artwork-placeholder"><span class="artwork-note">♪</span><small>yi Music</small></div>
+            </div>
+            <div class="now-playing">
+              <p class="eyebrow">正在播放</p>
+              <h1 id="nowTitle">尚未選擇歌曲</h1>
+              <p id="nowPlaylist" class="now-playlist">537</p>
+              <button id="compactPlayerButton" class="compact-trigger" type="button">縮小成浮動播放器</button>
+            </div>
           </div>
-          <div class="now-playing">
-            <p class="eyebrow">正在播放</p>
-            <h1 id="nowTitle">尚未選擇歌曲</h1>
-            <p id="nowPlaylist" class="now-playlist">537</p>
-            <button id="compactPlayerButton" class="compact-trigger" type="button">縮小成浮動播放器</button>
-          </div>
+
           <div class="progress-wrap">
             <input id="progressBar" type="range" min="0" max="1000" value="0" aria-label="播放進度">
             <div class="time-row"><span id="currentTime">0:00</span><span id="durationTime">0:00</span></div>
@@ -54,6 +58,13 @@
             <output id="volumeValue" for="volumeSlider">80%</output>
           </div>
           <button id="blackScreenButton" class="black-screen-trigger" type="button"><span class="black-dot"></span>黑屏播放<small>畫面全黑並嘗試保持喚醒</small></button>
+
+          <div class="video-section">
+            <div class="video-heading"><strong>影片畫面</strong><span>YouTube 播放器</span></div>
+            <div class="video-frame" aria-label="YouTube 影片播放區">
+              <div id="youtubePlayer"></div>
+            </div>
+          </div>
         </section>
 
         <section class="library-card" aria-label="歌單">
