@@ -9,7 +9,7 @@
   const PAGE_SIZE = 80;
   const $ = (id) => document.getElementById(id);
   const els = {
-    playerCard: $('playerCard'), playerPlaceholder: $('playerPlaceholder'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
+    playerCard: $('playerCard'), playerPlaceholder: $('artworkPlaceholder'), currentArtwork: $('currentArtwork'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
     progressBar: $('progressBar'), currentTime: $('currentTime'), durationTime: $('durationTime'),
     playButton: $('playButton'), previousButton: $('previousButton'), nextButton: $('nextButton'),
     shuffleButton: $('shuffleButton'), repeatButton: $('repeatButton'), blackScreenButton: $('blackScreenButton'),
@@ -250,8 +250,14 @@
     els.playButton.textContent = isPlaying ? '❚❚' : '▶';
     els.miniPlayButton.textContent = isPlaying ? '❚❚' : '▶';
     els.playerPlaceholder.hidden = Boolean(currentSong);
+    els.currentArtwork.hidden = !currentSong;
     els.miniPlayer.hidden = !currentSong || compactMode;
     if (currentSong) {
+      if (els.currentArtwork.dataset.videoId !== currentSong.videoId) {
+        els.currentArtwork.dataset.videoId = currentSong.videoId;
+        els.currentArtwork.src = thumbnail(currentSong.videoId, 'hqdefault');
+      }
+      els.currentArtwork.alt = `${currentSong.title} 封面`;
       els.miniThumb.src = thumbnail(currentSong.videoId);
       els.miniTitle.textContent = currentSong.title;
       els.miniPlaylist.textContent = playlist?.name || '';
