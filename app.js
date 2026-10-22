@@ -9,7 +9,7 @@
   const PAGE_SIZE = 80;
   const $ = (id) => document.getElementById(id);
   const els = {
-    playerCard: $('playerCard'), playerPlaceholder: $('artworkPlaceholder'), currentArtwork: $('currentArtwork'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
+    playerCard: $('playerCard'), videoCard: $('videoCard'), playerPlaceholder: $('artworkPlaceholder'), currentArtwork: $('currentArtwork'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
     progressBar: $('progressBar'), currentTime: $('currentTime'), durationTime: $('durationTime'),
     playButton: $('playButton'), previousButton: $('previousButton'), nextButton: $('nextButton'),
     shuffleButton: $('shuffleButton'), repeatButton: $('repeatButton'), blackScreenButton: $('blackScreenButton'),
@@ -268,6 +268,7 @@
   function applyCompactMode(enabled, { scroll = true } = {}) {
     compactMode = Boolean(enabled);
     els.playerCard.classList.toggle('is-compact', compactMode);
+    els.videoCard.classList.toggle('is-compact-video', compactMode);
     try { localStorage.setItem(COMPACT_KEY, compactMode ? '1' : '0'); } catch (_) {}
     updateNowPlaying();
     if (!compactMode && scroll) els.playerCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
