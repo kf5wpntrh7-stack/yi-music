@@ -276,3 +276,28 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline-color:#ef8
  .play-button{width:64px;height:64px}
  .control-button{width:35px}
 }
+
+
+/* Playlist-first mobile order; YouTube stays visible in its own panel */
+.workspace{grid-template-columns:minmax(0,1fr);grid-template-areas:"player" "library" "video";align-items:start}
+#playerCard{grid-area:player}
+.library-card{grid-area:library}
+.video-card{grid-area:video;min-width:0;padding:16px;border:1px solid rgba(255,255,255,.94);border-radius:30px;background:rgba(255,255,255,.97);box-shadow:var(--shadow)}
+.video-card .compact-header{display:none}
+.video-card .video-section{margin:0;padding:0;border:0}
+.player-card.is-compact{display:none!important;position:static!important;top:auto!important;right:auto!important;bottom:auto!important;width:auto!important;padding:0!important}
+.video-card.is-compact-video{position:fixed!important;z-index:60;top:auto!important;right:12px!important;bottom:calc(84px + env(safe-area-inset-bottom))!important;left:auto!important;width:min(340px,calc(100vw - 24px));margin:0;padding:8px;border-radius:17px;box-shadow:0 22px 70px rgba(0,0,0,.28)}
+.video-card.is-compact-video .compact-header{display:flex}
+.video-card.is-compact-video .video-heading{display:none}
+.video-card.is-compact-video .video-section{margin:0;padding:0;border:0}
+.video-card.is-compact-video .video-frame{float:none;width:100%;max-width:none;aspect-ratio:auto;height:200px;min-height:200px;margin:0;border-radius:11px}
+@media(min-width:860px){
+ .workspace{grid-template-columns:minmax(340px,420px) minmax(0,1fr);grid-template-areas:"player library" "video video";column-gap:20px;row-gap:20px}
+ #playerCard{grid-area:player}
+ .library-card{grid-area:library}
+ .video-card{grid-area:video;padding:18px 20px}
+}
+@media(max-width:620px){
+ .video-card{padding:13px;border-radius:27px}
+ .video-card.is-compact-video{width:min(230px,calc(100vw - 24px));padding:8px}
+}
