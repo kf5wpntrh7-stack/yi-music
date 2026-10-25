@@ -5,11 +5,12 @@
   const VOLUME_KEY = 'yi-music-volume-v1';
   const PLAYBACK_KEY = 'yi-music-playback-v1';
   const COMPACT_KEY = 'yi-music-compact-v1';
+  const VIEW_MODE_KEY = 'yi-music-view-mode-v1';
   const PRIMARY_PLAYLIST_ID = 'mb3-537';
   const PAGE_SIZE = 80;
   const $ = (id) => document.getElementById(id);
   const els = {
-    playerCard: $('playerCard'), videoCard: $('videoCard'), playerPlaceholder: $('artworkPlaceholder'), currentArtwork: $('currentArtwork'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
+    workspace: $('workspace'), viewModeButton: $('viewModeButton'), playerCard: $('playerCard'), videoCard: $('videoCard'), playerPlaceholder: $('artworkPlaceholder'), currentArtwork: $('currentArtwork'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
     progressBar: $('progressBar'), currentTime: $('currentTime'), durationTime: $('durationTime'),
     playButton: $('playButton'), previousButton: $('previousButton'), nextButton: $('nextButton'),
     shuffleButton: $('shuffleButton'), repeatButton: $('repeatButton'), blackScreenButton: $('blackScreenButton'),
@@ -50,6 +51,7 @@
   let visibleSongLimit = PAGE_SIZE;
   let lastPositionSave = 0;
   let compactMode = localStorage.getItem(COMPACT_KEY) === '1';
+  let viewMode = localStorage.getItem(VIEW_MODE_KEY) === 'mv' ? 'mv' : 'radio';
   let wasPlayingBeforeHidden = false;
   let pendingAutoplay = false;
   const storedVolume = localStorage.getItem(VOLUME_KEY);
@@ -262,6 +264,19 @@
       els.miniTitle.textContent = currentSong.title;
       els.miniPlaylist.textContent = playlist?.name || '';
       updateMediaSession();
+    }
+  }
+
+  function applyViewMode(mode, { scroll = false } = {}) {
+    viewMode = mode === 'mv' ? 'mv' : 'radio';
+    const isMvMode = viewMode === 'mv';
+    els.workspace.classList.toggle('is-mv-mode', isMvMode);
+    els.workspace.classList.toggle('is-radio-mode', !isMvMode);
+    els.viewModeButton.textContent = isMvMode ? '♪ 切換電台模式' : '▶ 顯示 MV';
+    els.viewModeButton.setAttribute('aria-pressed', String(isMvMode));
+    try { localStorage.setItem(VIEW_MODE_KEY, viewMode); } catch (_) {}
+    if (scroll) {
+      (isMvMode ? els.videoCard : els.playerCard).scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
 
@@ -763,6 +778,7 @@
   els.compactBlackScreenButton.addEventListener('click', enterBlackScreen);
   els.exitBlackScreen.addEventListener('click', exitBlackScreen);
   els.blackScreen.addEventListener('dblclick', exitBlackScreen);
+  els.viewModeButton.addEventListener('click', () => applyViewMode(viewMode === 'mv' ? 'radio' : 'mv', { scroll: true }));
   els.compactPlayerButton.addEventListener('click', () => applyCompactMode(true));
   els.compactRestoreButton.addEventListener('click', () => applyCompactMode(false));
 
@@ -877,6 +893,7 @@
   els.shuffleButton.classList.toggle('active', shuffle);
   els.repeatButton.classList.toggle('active', repeatMode !== 'off');
   els.repeatButton.textContent = repeatMode === 'one' ? '↻¹' : '↻';
+  applyViewMode(viewMode, { scroll: false });
   applyCompactMode(compactMode, { scroll: false });
   renderAll();
   loadYouTubeApi();
