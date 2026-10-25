@@ -301,3 +301,21 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline-color:#ef8
  .video-card{padding:13px;border-radius:27px}
  .video-card.is-compact-video{width:min(230px,calc(100vw - 24px));padding:8px}
 }
+
+
+/* Radio listening mode and one-tap MV switch */
+.view-mode-toggle{display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;margin-top:10px;padding:10px 13px;border:1px solid #f0c9c7;border-radius:14px;background:linear-gradient(135deg,#fff4f3,#fff);color:#c94f4c;font-size:.84rem;font-weight:800;letter-spacing:.01em}
+.view-mode-toggle:active{transform:scale(.99)}
+.workspace.is-radio-mode .video-card:not(.is-compact-video){position:absolute!important;left:-10000px!important;top:0!important;width:1px!important;height:1px!important;margin:0!important;padding:0!important;border:0!important;opacity:0!important;overflow:hidden!important;pointer-events:none!important;box-shadow:none!important}
+.workspace.is-mv-mode{grid-template-areas:"video" "player" "library"}
+.workspace.is-mv-mode .video-card:not(.is-compact-video){position:relative!important;left:auto!important;top:auto!important;width:auto!important;height:auto!important;margin:0!important;padding:13px!important;border:1px solid rgba(255,255,255,.94)!important;border-radius:27px!important;opacity:1!important;overflow:visible!important;pointer-events:auto!important;box-shadow:var(--shadow)!important;grid-area:video}
+.workspace.is-mv-mode .album-art{display:none}
+.workspace.is-mv-mode .now-playing-hero{grid-template-columns:minmax(0,1fr);gap:0}
+.workspace.is-mv-mode .now-playing{padding:0}
+.workspace.is-mv-mode .video-card .video-frame{width:100%;max-width:none;aspect-ratio:16/9;min-height:0;height:auto;margin:0}
+@media(min-width:860px){
+ .workspace.is-mv-mode{grid-template-columns:minmax(340px,420px) minmax(0,1fr);grid-template-areas:"player video" "library library"}
+ .workspace.is-mv-mode #playerCard{grid-area:player}
+ .workspace.is-mv-mode .video-card:not(.is-compact-video){grid-area:video;padding:18px 20px!important}
+ .workspace.is-mv-mode .library-card{grid-area:library}
+}
