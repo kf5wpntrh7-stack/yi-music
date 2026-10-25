@@ -10,7 +10,7 @@
   const PAGE_SIZE = 80;
   const $ = (id) => document.getElementById(id);
   const els = {
-    workspace: $('workspace'), viewModeButton: $('viewModeButton'), playerCard: $('playerCard'), videoCard: $('videoCard'), playerPlaceholder: $('artworkPlaceholder'), currentArtwork: $('currentArtwork'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
+    workspace: $('workspace'), viewModeButton: $('viewModeButton'), lyricsButton: $('lyricsButton'), lyricsPanel: $('lyricsPanel'), lyricsTitle: $('lyricsTitle'), lyricsStatus: $('lyricsStatus'), lyricsCandidates: $('lyricsCandidates'), lyricsText: $('lyricsText'), lyricsRetryButton: $('lyricsRetryButton'), lyricsCloseButton: $('lyricsCloseButton'), playerCard: $('playerCard'), videoCard: $('videoCard'), playerPlaceholder: $('artworkPlaceholder'), currentArtwork: $('currentArtwork'), nowTitle: $('nowTitle'), nowPlaylist: $('nowPlaylist'),
     progressBar: $('progressBar'), currentTime: $('currentTime'), durationTime: $('durationTime'),
     playButton: $('playButton'), previousButton: $('previousButton'), nextButton: $('nextButton'),
     shuffleButton: $('shuffleButton'), repeatButton: $('repeatButton'), blackScreenButton: $('blackScreenButton'),
@@ -59,6 +59,11 @@
   let previousVolume = volume || 80;
   let wakeLock = null;
   let toastTimer = null;
+  let lyricsSearchToken = 0;
+  let lyricsSearchCache = new Map();
+  let lyricsSearchResults = [];
+  let lyricsLines = [];
+  let lyricsActiveIndex = -1;
 
   function makeDefaultPlaylists() {
     const imported = Array.isArray(window.MB3_PLAYLISTS) ? window.MB3_PLAYLISTS : [];
@@ -280,6 +285,280 @@
     }
   }
 
+
+  function setLyricsPanelOpen(open) {
+    const shouldOpen = Boolean(open);
+    els.lyricsPanel.hidden = !shouldOpen;
+    els.lyricsButton.setAttribute('aria-expanded', String(shouldOpen));
+    els.lyricsButton.textContent = shouldOpen ? '♫ 收起歌詞' : '♫ 搜尋歌詞';
+    if (!shouldOpen) {
+      lyricsSearchToken += 1;
+      return;
+    }
+    if (currentSong) {
+      searchLyrics();
+    } else {
+      els.lyricsTitle.textContent = '尚未選擇歌曲';
+      els.lyricsStatus.textContent = '請先播放或選擇一首歌曲，再搜尋歌詞。';
+      els.lyricsCandidates.hidden = true;
+      els.lyricsText.hidden = true;
+    }
+  }
+
+  function cleanLyricsQuery(value) {
+    return String(value || '')
+      .replace(/\[[^\]]*(?:official|m\/v|\bmv\b|music video|lyrics?|中字|歌詞|가사|뮤직비디오|4k|1080p)[^\]]*\]/gi, ' ')
+      .replace(/\([^)]*(?:official|m\/v|\bmv\b|music video|lyrics?|中字|歌詞|가사|뮤직비디오|4k|1080p)[^)]*\)/gi, ' ')
+      .replace(/\b(?:official\s+(?:music\s+)?video|official\s+audio|music\s+video|lyrics?\s+video|lyric\s+video|color.?coded\s+lyrics|visualizer|performance\s+video)\b/gi, ' ')
+      .replace(/(?:中字|韓中歌詞|中韓歌詞|繁中歌詞|簡中歌詞|中文歌詞|韓文歌詞|歌詞版|뮤직비디오|가사|日本語字幕)/gi, ' ')
+      .replace(/\b(?:1080p|720p|4k|8k|hd)\b/gi, ' ')
+      .replace(/\s*[-|–—]\s*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function normalizeLyricsText(value) {
+    return String(value || '').normalize('NFKD').toLowerCase()
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+  }
+
+  function getLyricsSearchQueries() {
+    const titles = [currentSong?.title || ''];
+    try {
+      if (playerReady && playerVideoId() === currentSong?.videoId) {
+        const videoTitle = player.getVideoData?.().title || '';
+        if (videoTitle && videoTitle !== currentSong?.title) titles.push(videoTitle);
+      }
+    } catch (_) {}
+    const queries = [...new Set(titles.map(cleanLyricsQuery).filter(Boolean))].slice(0, 2);
+    return queries.length ? queries : [String(currentSong?.title || '').trim()].filter(Boolean);
+  }
+
+  function getLyricsDuration() {
+    try {
+      if (playerReady && playerVideoId() === currentSong?.videoId) {
+        return Number(player.getDuration?.()) || Number(currentSong?.duration) || 0;
+      }
+    } catch (_) {}
+    return Number(currentSong?.duration) || 0;
+  }
+
+  function scoreLyricsCandidate(result, query, duration) {
+    const normalizedQuery = normalizeLyricsText(query);
+    const track = normalizeLyricsText(result.trackName);
+    const artist = normalizeLyricsText(result.artistName);
+    if (!track || !normalizedQuery) return 0;
+    let score = 0;
+    if (track === normalizedQuery) score += 100;
+    else if (normalizedQuery.includes(track) || track.includes(normalizedQuery)) score += 65;
+    const queryTokens = new Set(normalizedQuery.split(' ').filter((token) => token.length > 1));
+    const trackTokens = track.split(' ').filter((token) => token.length > 1);
+    if (trackTokens.length) {
+      const overlap = trackTokens.filter((token) => queryTokens.has(token)).length;
+      score += overlap / trackTokens.length * 55;
+    }
+    if (artist && normalizedQuery.includes(artist)) score += 20;
+    const candidateDuration = Number(result.duration) || 0;
+    if (duration > 0 && candidateDuration > 0) {
+      const difference = Math.abs(duration - candidateDuration);
+      if (difference <= 5) score += 12;
+      else if (difference <= 15) score += 5;
+      else if (difference > 60) score -= 10;
+    }
+    return score;
+  }
+
+  function parseSyncedLyrics(value) {
+    const lines = [];
+    String(value || '').split(/\r?\n/).forEach((line) => {
+      const stamps = [...line.matchAll(/\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g)];
+      if (!stamps.length) return;
+      const lyricText = line.replace(/\[[^\]]+\]/g, '').trim();
+      if (!lyricText) return;
+      stamps.forEach((stamp) => {
+        const fraction = stamp[3] ? Number('0.' + stamp[3]) : 0;
+        lines.push({
+          time: Number(stamp[1]) * 60 + Number(stamp[2]) + fraction,
+          text: lyricText
+        });
+      });
+    });
+    return lines.sort((a, b) => a.time - b.time);
+  }
+
+  function renderLyricsCandidates(ranked) {
+    lyricsSearchResults = ranked.slice(0, 6).map((item) => item.result);
+    els.lyricsCandidates.replaceChildren();
+    lyricsSearchResults.forEach((result, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'lyrics-candidate';
+      button.dataset.lyricsIndex = String(index);
+      const main = document.createElement('span');
+      main.className = 'lyrics-candidate-main';
+      const title = document.createElement('strong');
+      title.textContent = result.trackName || '未知歌曲';
+      const artist = document.createElement('small');
+      artist.textContent = [result.artistName, result.albumName].filter(Boolean).join(' · ') || '歌手資料未提供';
+      main.append(title, artist);
+      const duration = document.createElement('span');
+      duration.className = 'lyrics-duration';
+      duration.textContent = Number(result.duration) > 0 ? formatTime(result.duration) : '歌詞';
+      button.append(main, duration);
+      els.lyricsCandidates.appendChild(button);
+    });
+    els.lyricsCandidates.hidden = lyricsSearchResults.length === 0;
+    els.lyricsText.hidden = true;
+  }
+
+  function displayLyricsResult(result) {
+    lyricsActiveIndex = -1;
+    lyricsLines = parseSyncedLyrics(result.syncedLyrics);
+    els.lyricsTitle.textContent = [result.trackName, result.artistName].filter(Boolean).join(' — ') || '歌詞';
+    els.lyricsCandidates.hidden = true;
+    els.lyricsCandidates.replaceChildren();
+    els.lyricsText.replaceChildren();
+    els.lyricsText.hidden = false;
+
+    if (lyricsLines.length) {
+      const fragment = document.createDocumentFragment();
+      lyricsLines.forEach((line, index) => {
+        const paragraph = document.createElement('p');
+        paragraph.className = 'lyrics-line';
+        paragraph.dataset.lyricLine = String(index);
+        paragraph.textContent = line.text;
+        fragment.appendChild(paragraph);
+      });
+      els.lyricsText.appendChild(fragment);
+      els.lyricsStatus.textContent = '找到同步歌詞，會依播放進度嘗試逐行標示。';
+      updateSyncedLyrics(getLyricsCurrentTime());
+      return;
+    }
+
+    lyricsLines = [];
+    const plain = String(result.plainLyrics || '').trim();
+    if (plain) {
+      const pre = document.createElement('pre');
+      pre.className = 'lyrics-plain';
+      pre.textContent = plain;
+      els.lyricsText.appendChild(pre);
+      els.lyricsStatus.textContent = '找到歌詞。這首歌目前沒有可用的同步時間資訊。';
+    } else {
+      els.lyricsText.hidden = true;
+      els.lyricsStatus.textContent = '找到歌曲資料，但沒有可顯示的歌詞內容。';
+    }
+  }
+
+  function getLyricsCurrentTime() {
+    try {
+      if (playerReady && playerVideoId() === currentSong?.videoId) return Number(player.getCurrentTime?.()) || 0;
+    } catch (_) {}
+    return 0;
+  }
+
+  function updateSyncedLyrics(currentTime) {
+    if (els.lyricsPanel.hidden || !lyricsLines.length) return;
+    let active = -1;
+    for (let index = 0; index < lyricsLines.length; index += 1) {
+      if (lyricsLines[index].time <= currentTime + 0.25) active = index;
+      else break;
+    }
+    if (active === lyricsActiveIndex) return;
+    const previous = els.lyricsText.querySelector('.lyrics-line.is-active');
+    if (previous) previous.classList.remove('is-active');
+    lyricsActiveIndex = active;
+    if (active < 0) return;
+    const next = els.lyricsText.querySelector('[data-lyric-line="' + active + '"]');
+    if (next) {
+      next.classList.add('is-active');
+      next.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  async function searchLyrics({ force = false } = {}) {
+    const token = ++lyricsSearchToken;
+    const songId = currentSong?.id;
+    if (!currentSong) {
+      els.lyricsTitle.textContent = '尚未選擇歌曲';
+      els.lyricsStatus.textContent = '請先播放或選擇一首歌曲，再搜尋歌詞。';
+      return;
+    }
+
+    const queries = getLyricsSearchQueries();
+    const duration = getLyricsDuration();
+    els.lyricsTitle.textContent = currentSong.title || '目前歌曲';
+    els.lyricsStatus.textContent = '正在搜尋「' + (queries[0] || currentSong.title) + '」…';
+    els.lyricsCandidates.hidden = true;
+    els.lyricsCandidates.replaceChildren();
+    els.lyricsText.hidden = true;
+    els.lyricsText.replaceChildren();
+    lyricsSearchResults = [];
+    lyricsLines = [];
+    lyricsActiveIndex = -1;
+
+    let results = [];
+    let scoringQuery = queries[0] || currentSong.title;
+    let lastError = null;
+    for (const query of queries) {
+      if (token !== lyricsSearchToken || currentSong?.id !== songId) return;
+      try {
+        let items;
+        if (!force && lyricsSearchCache.has(query)) {
+          items = lyricsSearchCache.get(query);
+        } else {
+          const response = await fetch('https://lrclib.net/api/search?q=' + encodeURIComponent(query), {
+            headers: { 'X-User-Agent': 'yi-music/1.0 (https://kf5wpntrh7-stack.github.io/yi-music/)' }
+          });
+          if (!response.ok) throw new Error(response.status === 429 ? 'rate' : 'network');
+          items = await response.json();
+          if (!Array.isArray(items)) items = [];
+          lyricsSearchCache.set(query, items);
+        }
+        const withLyrics = items.filter((item) => item && (item.plainLyrics || item.syncedLyrics));
+        if (withLyrics.length) {
+          results = withLyrics;
+          scoringQuery = query;
+          break;
+        }
+      } catch (error) {
+        lastError = error;
+        if (error?.message === 'rate') break;
+      }
+    }
+
+    if (token !== lyricsSearchToken || currentSong?.id !== songId) return;
+    if (!results.length) {
+      if (lastError) {
+        els.lyricsStatus.textContent = lastError.message === 'rate'
+          ? '搜尋服務目前比較忙，請稍後再試。'
+          : '暫時無法連線到歌詞服務，請稍後再試。';
+      } else {
+        els.lyricsStatus.textContent = '找不到歌詞。歌曲可能尚未收錄，或需要使用不同版本的歌名。';
+      }
+      return;
+    }
+
+    const unique = new Map();
+    results.forEach((result) => {
+      const key = [result.trackName, result.artistName, result.duration].join('|');
+      if (!unique.has(key)) unique.set(key, result);
+    });
+    const ranked = [...unique.values()]
+      .map((result) => ({ result, score: scoreLyricsCandidate(result, scoringQuery, duration) }))
+      .sort((a, b) => b.score - a.score);
+
+    if (ranked.length === 1 && ranked[0].score >= 55) {
+      displayLyricsResult(ranked[0].result);
+    } else if (ranked.length > 1 && ranked[0].score >= 100 && ranked[0].score - ranked[1].score >= 12) {
+      displayLyricsResult(ranked[0].result);
+    } else {
+      els.lyricsStatus.textContent = '找到幾個可能的版本，請選擇正確的歌曲：';
+      renderLyricsCandidates(ranked);
+    }
+  }
+
   function applyCompactMode(enabled, { scroll = true } = {}) {
     compactMode = Boolean(enabled);
     els.playerCard.classList.toggle('is-compact', compactMode);
@@ -318,6 +597,7 @@
     if (!isSameSong) playbackPrefs.position = 0;
     savePlaybackPrefs(isSameSong ? playbackPrefs.position : 0);
     updateNowPlaying();
+    if (!isSameSong && !els.lyricsPanel.hidden) searchLyrics();
     renderSongList();
     if (playerReady) loadCurrentSong({ autoplay, position: isSameSong ? (player.getCurrentTime?.() || playbackPrefs.position || 0) : 0 });
   }
@@ -434,6 +714,7 @@
       if (document.activeElement !== els.progressBar) els.progressBar.value = duration ? Math.round(current / duration * 1000) : 0;
       els.currentTime.textContent = formatTime(current);
       els.durationTime.textContent = formatTime(duration);
+      updateSyncedLyrics(current);
       if ('mediaSession' in navigator && duration > 0 && current >= 0 && current <= duration) {
         try { navigator.mediaSession.setPositionState({ duration, playbackRate: player.getPlaybackRate?.() || 1, position: current }); } catch (_) {}
       }
@@ -779,6 +1060,15 @@
   els.exitBlackScreen.addEventListener('click', exitBlackScreen);
   els.blackScreen.addEventListener('dblclick', exitBlackScreen);
   els.viewModeButton.addEventListener('click', () => applyViewMode(viewMode === 'mv' ? 'radio' : 'mv', { scroll: true }));
+  els.lyricsButton.addEventListener('click', () => setLyricsPanelOpen(els.lyricsPanel.hidden));
+  els.lyricsRetryButton.addEventListener('click', () => searchLyrics({ force: true }));
+  els.lyricsCloseButton.addEventListener('click', () => setLyricsPanelOpen(false));
+  els.lyricsCandidates.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-lyrics-index]');
+    if (!button) return;
+    const result = lyricsSearchResults[Number(button.dataset.lyricsIndex)];
+    if (result) displayLyricsResult(result);
+  });
   els.compactPlayerButton.addEventListener('click', () => applyCompactMode(true));
   els.compactRestoreButton.addEventListener('click', () => applyCompactMode(false));
 
