@@ -36,9 +36,21 @@
               <h1 id="nowTitle">尚未選擇歌曲</h1>
               <p id="nowPlaylist" class="now-playlist">537</p>
               <button id="viewModeButton" class="view-mode-toggle" type="button" aria-pressed="false">▶ 顯示 MV</button>
+              <button id="lyricsButton" class="lyrics-trigger" type="button" aria-expanded="false">♫ 搜尋歌詞</button>
               <button id="compactPlayerButton" class="compact-trigger" type="button">縮小成浮動播放器</button>
             </div>
           </div>
+
+          <section id="lyricsPanel" class="lyrics-panel" aria-label="歌詞" hidden>
+            <div class="lyrics-panel-header">
+              <div class="lyrics-heading"><p class="eyebrow">LYRICS</p><h2 id="lyricsTitle">目前歌曲歌詞</h2></div>
+              <div class="lyrics-toolbar"><button id="lyricsRetryButton" type="button">重新搜尋</button><button id="lyricsCloseButton" type="button">收起</button></div>
+            </div>
+            <p id="lyricsStatus" class="lyrics-status" role="status" aria-live="polite">按下「搜尋歌詞」即可查詢目前歌曲。</p>
+            <div id="lyricsCandidates" class="lyrics-candidates" hidden></div>
+            <div id="lyricsText" class="lyrics-text" hidden></div>
+            <p class="lyrics-footnote">歌詞資料由 LRCLIB 提供；若歌曲未收錄，或 MV 與音源版本不同，可能找不到或無法完全同步。</p>
+          </section>
 
           <div class="progress-wrap">
             <input id="progressBar" type="range" min="0" max="1000" value="0" aria-label="播放進度">
