@@ -324,7 +324,7 @@
       .trim();
   }
 
-  function getLyricsSearchQueries() {
+  function getLyricsSearchStrategies() {
     const titles = [currentSong?.title || ''];
     try {
       if (playerReady && playerVideoId() === currentSong?.videoId) {
@@ -332,23 +332,82 @@
         if (videoTitle && videoTitle !== currentSong?.title) titles.push(videoTitle);
       }
     } catch (_) {}
-    const queries = [...new Set(titles.map(cleanLyricsQuery).filter(Boolean))].slice(0, 2);
-    return queries.length ? queries : [String(currentSong?.title || '').trim()].filter(Boolean);
-  }
 
-  function getLyricsDuration() {
-    try {
-      if (playerReady && playerVideoId() === currentSong?.videoId) {
-        return Number(player.getDuration?.()) || Number(currentSong?.duration) || 0;
+    const strategies = [];
+    const seen = new Set();
+    const add = (params, scoringTitle, artistHint = '') => {
+      const cleanParams = Object.fromEntries(Object.entries(params).filter(([, value]) => String(value || '').trim()));
+      if (!Object.keys(cleanParams).length) return;
+      const key = JSON.stringify(cleanParams);
+      if (seen.has(key)) return;
+      seen.add(key);
+      strategies.push({ params: cleanParams, scoringTitle: scoringTitle || '', artistHint: artistHint || '' });
+    };
+
+    titles.forEach((rawTitle) => {
+      const cleaned = cleanLyricsQuery(rawTitle);
+      if (!cleaned) return;
+
+      let artist = '';
+      let track = '';
+      const quoted = cleaned.match(/^(.*?)\s*[「『《〈](.+?)[」』》〉]/);
+      if (quoted) {
+        artist = quoted[1].trim();
+        track = quoted[2].trim();
+      } else {
+        const separated = cleaned.split(/\s+(?:-|–|—|\|)\s+/).map((part) => part.trim()).filter(Boolean);
+        if (separated.length >= 2) {
+          artist = separated[0];
+          track = separated.length > 2 ? separated[1] : separated.slice(1).join(' ');
+        } else {
+          const compactSeparated = cleaned.split(/\s*[-–—|]\s*/).map((part) => part.trim()).filter(Boolean);
+          if (compactSeparated.length >= 3) {
+            artist = compactSeparated[compactSeparated.length - 2];
+            track = compactSeparated[compactSeparated.length - 1];
+          } else if (compactSeparated.length === 2) {
+            artist = compactSeparated[0];
+            track = compactSeparated[1];
+          }
+        }
       }
-    } catch (_) {}
-    return Number(currentSong?.duration) || 0;
+
+      const trackVariants = [];
+      const addTrack = (value) => {
+        const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+        if (normalized && !trackVariants.includes(normalized)) trackVariants.push(normalized);
+      };
+      addTrack(track);
+      addTrack(track.replace(/\s*[\(\（][^\)\）]*[\)\）]/g, ' ').replace(/\s+/g, ' ').trim());
+      const bracketTrack = track.match(/[\(\（]([^\)\）]+)[\)\）]/);
+      if (bracketTrack && !/\b(?:feat|ft|official|remaster|version|live|acoustic)\b/i.test(bracketTrack[1])) {
+        addTrack(bracketTrack[1]);
+      }
+
+      if (track && artist) {
+        trackVariants.slice(0, 3).forEach((trackVariant) => {
+          add({ track_name: trackVariant, artist_name: artist }, trackVariant, artist);
+        });
+      }
+      trackVariants.slice(0, 3).forEach((trackVariant) => {
+        add({ track_name: trackVariant }, trackVariant, artist);
+        add({ q: trackVariant }, trackVariant, artist);
+      });
+      add({ q: cleaned }, track || cleaned, artist);
+    });
+
+    return strategies.slice(0, 8);
   }
 
-  function scoreLyricsCandidate(result, query, duration) {
+  function hasLyricsText(value) {
+    const text = String(value || '').trim();
+    return Boolean(text) && text.toLowerCase() !== 'null';
+  }
+
+  function scoreLyricsCandidate(result, query, duration, artistHint = '') {
     const normalizedQuery = normalizeLyricsText(query);
     const track = normalizeLyricsText(result.trackName);
     const artist = normalizeLyricsText(result.artistName);
+    const normalizedArtistHint = normalizeLyricsText(artistHint);
     if (!track || !normalizedQuery) return 0;
     let score = 0;
     if (track === normalizedQuery) score += 100;
@@ -359,7 +418,8 @@
       const overlap = trackTokens.filter((token) => queryTokens.has(token)).length;
       score += overlap / trackTokens.length * 55;
     }
-    if (artist && normalizedQuery.includes(artist)) score += 20;
+    if (artist && normalizedArtistHint && (artist === normalizedArtistHint || artist.includes(normalizedArtistHint) || normalizedArtistHint.includes(artist))) score += 25;
+    else if (artist && normalizedQuery.includes(artist)) score += 20;
     const candidateDuration = Number(result.duration) || 0;
     if (duration > 0 && candidateDuration > 0) {
       const difference = Math.abs(duration - candidateDuration);
@@ -486,10 +546,10 @@
       return;
     }
 
-    const queries = getLyricsSearchQueries();
+    const strategies = getLyricsSearchStrategies();
     const duration = getLyricsDuration();
     els.lyricsTitle.textContent = currentSong.title || '目前歌曲';
-    els.lyricsStatus.textContent = '正在搜尋「' + (queries[0] || currentSong.title) + '」…';
+    els.lyricsStatus.textContent = '正在搜尋歌名與歌手的不同組合…';
     els.lyricsCandidates.hidden = true;
     els.lyricsCandidates.replaceChildren();
     els.lyricsText.hidden = true;
@@ -499,27 +559,41 @@
     lyricsActiveIndex = -1;
 
     let results = [];
-    let scoringQuery = queries[0] || currentSong.title;
+    let scoringQuery = strategies[0]?.scoringTitle || currentSong.title;
+    let artistHint = strategies[0]?.artistHint || '';
     let lastError = null;
-    for (const query of queries) {
+    let successfulRequests = 0;
+
+    for (let index = 0; index < strategies.length; index += 1) {
       if (token !== lyricsSearchToken || currentSong?.id !== songId) return;
+      const strategy = strategies[index];
+      const cacheKey = JSON.stringify(strategy.params);
       try {
         let items;
-        if (!force && lyricsSearchCache.has(query)) {
-          items = lyricsSearchCache.get(query);
+        if (!force && lyricsSearchCache.has(cacheKey)) {
+          items = lyricsSearchCache.get(cacheKey);
         } else {
-          const response = await fetch('https://lrclib.net/api/search?q=' + encodeURIComponent(query), {
-            headers: { 'X-User-Agent': 'yi-music/1.0 (https://kf5wpntrh7-stack.github.io/yi-music/)' }
+          if (index > 0) await new Promise((resolve) => setTimeout(resolve, 250));
+          const url = new URL('https://lrclib.net/api/search');
+          Object.entries(strategy.params).forEach(([key, value]) => url.searchParams.set(key, value));
+          const response = await fetch(url.toString(), {
+            headers: { 'X-User-Agent': 'yi-music/1.1 (https://kf5wpntrh7-stack.github.io/yi-music/)' }
           });
-          if (!response.ok) throw new Error(response.status === 429 ? 'rate' : 'network');
+          if (!response.ok) {
+            const error = new Error(response.status === 429 ? 'rate' : 'http');
+            error.status = response.status;
+            throw error;
+          }
           items = await response.json();
           if (!Array.isArray(items)) items = [];
-          lyricsSearchCache.set(query, items);
+          lyricsSearchCache.set(cacheKey, items);
         }
-        const withLyrics = items.filter((item) => item && (item.plainLyrics || item.syncedLyrics));
+        successfulRequests += 1;
+        const withLyrics = items.filter((item) => item && (hasLyricsText(item.plainLyrics) || hasLyricsText(item.syncedLyrics)));
         if (withLyrics.length) {
           results = withLyrics;
-          scoringQuery = query;
+          scoringQuery = strategy.scoringTitle || currentSong.title;
+          artistHint = strategy.artistHint || '';
           break;
         }
       } catch (error) {
@@ -530,12 +604,14 @@
 
     if (token !== lyricsSearchToken || currentSong?.id !== songId) return;
     if (!results.length) {
-      if (lastError) {
+      if (lastError && successfulRequests === 0) {
         els.lyricsStatus.textContent = lastError.message === 'rate'
-          ? '搜尋服務目前比較忙，請稍後再試。'
-          : '暫時無法連線到歌詞服務，請稍後再試。';
+          ? '歌詞服務目前請求過多，請稍後再試。'
+          : lastError.status
+            ? '歌詞服務回應錯誤（HTTP ' + lastError.status + '），請稍後再試。'
+            : '無法連線到歌詞服務。請確認網路連線後再試。';
       } else {
-        els.lyricsStatus.textContent = '找不到歌詞。歌曲可能尚未收錄，或需要使用不同版本的歌名。';
+        els.lyricsStatus.textContent = '已嘗試 ' + strategies.length + ' 種歌名組合，仍找不到收錄的歌詞。可以試著選擇一首英文歌，或稍後再試。';
       }
       return;
     }
@@ -546,7 +622,7 @@
       if (!unique.has(key)) unique.set(key, result);
     });
     const ranked = [...unique.values()]
-      .map((result) => ({ result, score: scoreLyricsCandidate(result, scoringQuery, duration) }))
+      .map((result) => ({ result, score: scoreLyricsCandidate(result, scoringQuery, duration, artistHint) }))
       .sort((a, b) => b.score - a.score);
 
     if (ranked.length === 1 && ranked[0].score >= 55) {
